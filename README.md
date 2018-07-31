@@ -25,7 +25,7 @@ module.exports = {
   // to customize your Truffle configuration!
   networks: {
     development: {
-      host: "localhost",
+      host: "127.0.0.1",
       port: 8545,
       network_id: "*" // 匹配任何network id
     }
@@ -33,7 +33,7 @@ module.exports = {
 };
 ```
 
-###3. 安装`ganache-cli`,`web3`
+### 3. 安装`ganache-cli`,`web3`
 ```
 $ npm install ganache-cli
 $ npm install web3
@@ -77,11 +77,10 @@ truffle(development)> contract.greet()
 
 ### 9.任务
  
- compile.sh: 编译且加入合约
- build.sh: 编译且加入合约，然后打开控制台
- test.sh: 编译且加入合约，然后测试全部用例
-
- test(file)：测试当前打开的测试文件，前提是已经编译好了
- start service：启动服务
+- compile.sh: 编译且加入合约
+- build.sh: 编译且加入合约，然后打开控制台
+- test.sh: 编译且加入合约，然后测试全部用例
+- test(file)：测试当前打开的测试文件，前提是已经编译好了
+- start service：启动服务
 
  注意：测试和部署前，先启动服务器
