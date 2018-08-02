@@ -2,7 +2,7 @@ pragma solidity ^0.4.23;
 
 ///////////////////////////////////////
 // SafeMath
-// version: v0.1.9
+// version: v0.1.9 函数库
 ///////////////////////////////////////
 library SafeMath {
     /**
@@ -74,7 +74,7 @@ library SafeMath {
 
 ///////////////////////////////////////
 // NameFilter
-// 过滤名称
+// 过滤名称 函数库
 ///////////////////////////////////////
 
 library NameFilter {
@@ -156,7 +156,7 @@ interface PlayerBookInterface {
 
 ///////////////////////////////////////
 // F3DKeysCalcLong
-// key的计算方法
+// key的计算方法 函数库
 ///////////////////////////////////////
 
 library F3DKeysCalcLong {
@@ -196,7 +196,7 @@ library F3DKeysCalcLong {
 
 ///////////////////////////////////////
 // F3Ddatasets
-// 数据集
+// 数据集 函数库
 ///////////////////////////////////////
 
 library F3Ddatasets {
@@ -252,7 +252,7 @@ library F3Ddatasets {
 
 ///////////////////////////////////////
 // F3Devents
-// 事件
+// 事件 合约
 ///////////////////////////////////////
 
 contract F3Devents {
@@ -1231,33 +1231,32 @@ contract FoMo3Dlong is modularLong {
         return(  ((((round_[_rID].mask).add(((((round_[_rID].pot).mul(potSplit_[round_[_rID].team].gen)) / 100).mul(1000000000000000000)) / (round_[_rID].keys))).mul(plyrRnds_[_pID][_rID].keys)) / 1000000000000000000)  );
     }
 
+    /**
+    *   返回每个金库的玩家收入(赢家金库，普通金库，会员金库)
+     */
     function getPlayerVaults(uint256 _pID) public view returns(uint256 ,uint256, uint256) {
-        // setup local rID
         uint256 _rID = rID_;
         
-        // if round has ended.  but round end has not been run (so contract has not distributed winnings)
+        //如果回合结束了 但还未调用回合结束的函数(所以合同没有分配奖金)
         if (now > round_[_rID].end && round_[_rID].ended == false && round_[_rID].plyr != 0)
         {
-            // if player is winner 
-            if (round_[_rID].plyr == _pID)
-            {
+            // 如果玩家赢了
+            if (round_[_rID].plyr == _pID) {
                 return
                 (
-                    (plyr_[_pID].win).add( ((round_[_rID].pot).mul(48)) / 100 ),
-                    (plyr_[_pID].gen).add(  getPlayerVaultsHelper(_pID, _rID).sub(plyrRnds_[_pID][_rID].mask)   ),
+                    (plyr_[_pID].win).add(((round_[_rID].pot).mul(48)) / 100),
+                    (plyr_[_pID].gen).add(getPlayerVaultsHelper(_pID, _rID).sub(plyrRnds_[_pID][_rID].mask)),
                     plyr_[_pID].aff
                 );
-            // if player is not the winner
             } else {
                 return
                 (
                     plyr_[_pID].win,
-                    (plyr_[_pID].gen).add(  getPlayerVaultsHelper(_pID, _rID).sub(plyrRnds_[_pID][_rID].mask)  ),
+                    (plyr_[_pID].gen).add(getPlayerVaultsHelper(_pID, _rID).sub(plyrRnds_[_pID][_rID].mask)),
                     plyr_[_pID].aff
                 );
             }
-            
-        // if round is still going on, or round has ended and round end has been ran
+        // 如果回合仍在继续，或回合结束了 但已经调用回合结束的函数
         } else {
             return
             (
@@ -1266,5 +1265,447 @@ contract FoMo3Dlong is modularLong {
                 plyr_[_pID].aff
             );
         }
+    }
+
+     /**
+     * @dev 返回前端所需的所有当前回合信息
+     * @return ICO期间投资的eth
+     * @return 回合id
+     * @return 所有钥匙
+     * @return 回合结束时间
+     * @return 回合开始时间
+     * @return 当前的奖池
+     * @return 当前队伍id & 当前带队玩家id
+     * @return 当前带队玩家地址
+     * @return 当前带队玩家姓名
+     * @return 当前回合中whales的eth
+     * @return 当前回合中bears的eth
+     * @return 当前回合中sneks的eth
+     * @return 当前回合中bulls的eth
+     * @return 空投跟踪器 # & 空投奖池
+     */
+    function getCurrentRoundInfo() public view
+        returns(uint256, uint256, uint256, uint256, uint256, uint256, uint256, address, bytes32, uint256, uint256, uint256, uint256, uint256)
+    {
+        uint256 _rID = rID_;
+        
+        return
+        (
+            round_[_rID].ico,               //0
+            _rID,                           //1
+            round_[_rID].keys,              //2
+            round_[_rID].end,               //3
+            round_[_rID].strt,              //4
+            round_[_rID].pot,               //5
+            (round_[_rID].team + (round_[_rID].plyr * 10)),     //6
+            plyr_[round_[_rID].plyr].addr,  //7
+            plyr_[round_[_rID].plyr].name,  //8
+            rndTmEth_[_rID][0],             //9
+            rndTmEth_[_rID][1],             //10
+            rndTmEth_[_rID][2],             //11
+            rndTmEth_[_rID][3],             //12
+            airDropTracker_ + (airDropPot_ * 1000)              //13
+        );
+    }
+
+    /**
+     * @dev 根据地址返回玩家信息。 如果没有给出地址，它会用msg.sender 作为地址
+     * @param _addr address of the player you want to lookup 
+     * @return 玩家id
+     * @return 玩家姓名
+     * @return 当前玩家所有的钥匙数量
+     * @return 赢家金库
+     * @return 普通金库
+     * @return 雇佣金库
+	 * @return 当前玩家要有的eth数量
+     */
+    function getPlayerInfoByAddress(address _addr) public view 
+        returns(uint256, bytes32, uint256, uint256, uint256, uint256, uint256) {
+        uint256 _rID = rID_;
+        
+        if (_addr == address(0)) {
+            _addr == msg.sender;
+        }
+        uint256 _pID = pIDxAddr_[_addr];
+        
+        return
+        (
+            _pID,                               //0
+            plyr_[_pID].name,                   //1
+            plyrRnds_[_pID][_rID].keys,         //2
+            plyr_[_pID].win,                    //3
+            (plyr_[_pID].gen).add(calcUnMaskedEarnings(_pID, plyr_[_pID].lrnd)),       //4
+            plyr_[_pID].aff,                    //5
+            plyrRnds_[_pID][_rID].eth           //6
+        );
+    }
+
+    //===============================
+    // 业务逻辑
+    //===============================
+    
+    /**
+    * 将所有传入的以太坊转换为钥匙
+    * _affCode：获得联盟费用的玩家的ID/地址/姓名
+    * _team：玩家所在团队
+     */
+    function buyXid(uint256 _affCode, uint256 _team) isActivated() isHuman() isWithinLimits(msg.value) public payable {
+        // 设置我们的交易事件数据并确定玩家是否是新手
+        F3Ddatasets.EventReturns memory _eventData_ = determinePID(_eventData_);
+        uint256 _affCode0 = _affCode;
+        uint256 _team0 = _team;
+        
+        // 获取玩家id
+        uint256 _pID = pIDxAddr_[msg.sender];
+        
+        // 管理会员残差
+        // 如果没有给出_affCode或者玩家试图使用他们自己的
+        if (_affCode0 == 0 || _affCode0 == _pID)
+        {
+            // 使用最后存储的_affCode
+            _affCode0 = plyr_[_pID].laff;
+            
+        // 如果提供_affCode并且它与先前存储的不同
+        } else if (_affCode0 != plyr_[_pID].laff) {
+            // 更新最后一个会员
+            plyr_[_pID].laff = _affCode0;
+        }
+        
+        // 验证是否选择了有效的团队
+        _team0 = verifyTeam(_team0);
+        
+        buyCore(_pID, _affCode0, _team0, _eventData_);
+    }
+
+   /**
+    * 将所有传入的以太坊转换为钥匙
+    * _affCode：获得联盟费用的玩家的ID/地址/姓名
+    * _team：玩家所在团队
+     */
+    function buyXaddr(address _affCode, uint256 _team) isActivated() isHuman() isWithinLimits(msg.value) public payable {
+        // 设置我们的交易事件数据并确定玩家是否是新手
+        F3Ddatasets.EventReturns memory _eventData_ = determinePID(_eventData_);
+        address _affCode0 = _affCode;
+        uint256 _team0 = _team;
+        
+        // 获取玩家id
+        uint256 _pID = pIDxAddr_[msg.sender];
+        
+        // 管理会员残差
+        uint256 _affID;
+        // 如果没有给出_affCode或者玩家试图使用他们自己的
+        if (_affCode0 == address(0) || _affCode0 == msg.sender)
+        {
+            // 使用最后存储的_affCode
+            _affID = plyr_[_pID].laff;
+
+        } else {
+            // 获取最后一个_affCode
+            _affID = pIDxAddr_[_affCode0];
+            
+            // 如果提供_affCode并且它与先前存储的不同
+            if (_affID != plyr_[_pID].laff)
+            {
+                // 更新最后一个会员
+                plyr_[_pID].laff = _affID;
+            }
+        }
+        
+        // 验证是否选择了有效的团队
+        _team0 = verifyTeam(_team0);
+        
+        buyCore(_pID, _affID, _team0, _eventData_);
+    }
+
+    /**
+    * 将所有传入的以太坊转换为钥匙
+    * _affCode：获得联盟费用的玩家的ID/地址/姓名
+    * _team：玩家所在团队
+     */
+    function buyXname(bytes32 _affCode, uint256 _team) isActivated() isHuman() isWithinLimits(msg.value) public payable {
+        // 设置我们的交易事件数据并确定玩家是否是新手
+        F3Ddatasets.EventReturns memory _eventData_ = determinePID(_eventData_);
+        bytes32 _affCode0 = _affCode;
+        uint256 _team0 = _team;
+        
+        // 获取玩家id
+        uint256 _pID = pIDxAddr_[msg.sender];
+        
+        // 管理会员残差
+        uint256 _affID;
+        // 如果没有给出_affCode或者玩家试图使用他们自己的
+        if (_affCode0 == "" || _affCode0 == plyr_[_pID].name)
+        {
+            // 使用最后存储的_affCode
+            _affID = plyr_[_pID].laff;
+        } else {
+            // 获取最后一个_affCode
+            _affID = pIDxName_[_affCode0];
+            
+            // 如果提供_affCode并且它与先前存储的不同
+            if (_affID != plyr_[_pID].laff)
+            {
+                // 更新最后一个会员
+                plyr_[_pID].laff = _affID;
+            }
+        }
+        
+        // 验证是否选择了有效的团队
+        _team0 = verifyTeam(_team0);
+        
+        buyCore(_pID, _affID, _team0, _eventData_);
+    }
+
+    /**
+    * 与购买基本相同，但不是您从钱包中发送以太币，而是使用您未提取的收入
+    * _affCode：获得联盟费用的玩家的ID/地址/姓名
+    * _team：玩家所在团队
+    * _eth：使用的收入金额（余额退回金库）
+     */
+    function reLoadXid(uint256 _affCode, uint256 _team, uint256 _eth) isActivated() isHuman() isWithinLimits(_eth) public {
+        // 设置我们的交易事件数据
+        F3Ddatasets.EventReturns memory _eventData_;
+        uint256 _affCode0 = _affCode;
+        uint256 _team0 = _team;
+        
+        // 获取玩家id
+        uint256 _pID = pIDxAddr_[msg.sender];
+        
+        // 管理会员残差
+        // 如果没有给出_affCode或者玩家试图使用他们自己的
+        if (_affCode0 == 0 || _affCode0 == _pID) {
+            // 使用最后存储的_affCode
+            _affCode0 = plyr_[_pID].laff;
+            
+        // 如果提供_affCode并且它与先前存储的不同
+        } else if (_affCode0 != plyr_[_pID].laff) {
+            // 更新最后一个会员
+            plyr_[_pID].laff = _affCode0;
+        }
+
+        // 验证是否选择了有效的团队
+        _team0 = verifyTeam(_team0);
+
+        reLoadCore(_pID, _affCode0, _team0, _eth, _eventData_);
+    }
+
+     /**
+    * 与购买基本相同，但不是您从钱包中发送以太币，而是使用您未提取的收入
+    * _affCode：获得联盟费用的玩家的ID/地址/姓名
+    * _team：玩家所在团队
+    * _eth：使用的收入金额（余额退回金库）
+     */
+    function reLoadXaddr(address _affCode, uint256 _team, uint256 _eth) isActivated() isHuman() isWithinLimits(_eth) public {
+        // 设置我们的交易事件数据
+        F3Ddatasets.EventReturns memory _eventData_;
+        address _affCode0 = _affCode;
+        uint256 _team0 = _team;
+        
+        // 获取玩家id
+        uint256 _pID = pIDxAddr_[msg.sender];
+        
+        // 管理会员残差
+        uint256 _affID;
+        // 如果没有给出_affCode或者玩家试图使用他们自己的
+        if (_affCode0 == address(0) || _affCode0 == msg.sender) {
+            // 使用最后存储的_affCode
+            _affID = plyr_[_pID].laff;
+          
+        } else {
+            // 获取最后一个_affCode
+            _affID = pIDxAddr_[_affCode0];
+            
+            // 如果提供_affCode并且它与先前存储的不同
+            if (_affID != plyr_[_pID].laff) {
+                // 更新最后一个会员
+                plyr_[_pID].laff = _affID;
+            }
+        }
+        
+        // 验证是否选择了有效的团队
+        _team0 = verifyTeam(_team0);
+        
+        reLoadCore(_pID, _affID, _team0, _eth, _eventData_);
+    }
+
+     /**
+    * 与购买基本相同，但不是您从钱包中发送以太币，而是使用您未提取的收入
+    * _affCode：获得联盟费用的玩家的ID/地址/姓名
+    * _team：玩家所在团队
+    * _eth：使用的收入金额（余额退回金库）
+     */
+    function reLoadXname(bytes32 _affCode, uint256 _team, uint256 _eth) isActivated() isHuman() isWithinLimits(_eth) public {
+        // 设置我们的交易事件数据
+        F3Ddatasets.EventReturns memory _eventData_;
+        bytes32 _affCode0 = _affCode;
+        uint256 _team0 = _team;
+        
+        // 获取玩家id
+        uint256 _pID = pIDxAddr_[msg.sender];
+        
+        // 管理会员残差
+        uint256 _affID;
+        // 如果没有给出_affCode或者玩家试图使用他们自己的
+        if (_affCode0 == "" || _affCode0 == plyr_[_pID].name) {
+            // 使用最后存储的_affCode
+            _affID = plyr_[_pID].laff;
+        
+        } else {
+            // 获取最后一个_affCode
+            _affID = pIDxName_[_affCode0];
+            
+            // 如果提供_affCode并且它与先前存储的不同
+            if (_affID != plyr_[_pID].laff) {
+                // 更新最后一个会员
+                plyr_[_pID].laff = _affID;
+            }
+        }
+        
+        // 验证是否选择了有效的团队
+        _team0 = verifyTeam(_team0);
+        
+        reLoadCore(_pID, _affID, _team0, _eth, _eventData_);
+    }
+
+    /**
+    * 取款所有收入
+     */
+    function withdraw() isActivated() isHuman() public {
+        uint256 _rID = rID_;
+        uint256 _now = now;
+        
+        // 获取玩家id
+        uint256 _pID = pIDxAddr_[msg.sender];
+        
+        // 为玩家eth设置临时变量
+        uint256 _eth;
+        
+        // 检查回合是否已经结束 并且没有调用结束回合的函数
+        if (_now > round_[_rID].end && round_[_rID].ended == false && round_[_rID].plyr != 0) {
+            // 设置交易事件数据
+            F3Ddatasets.EventReturns memory _eventData_;
+            
+            // 结束回合 (分配奖池))
+            round_[_rID].ended = true;
+            _eventData_ = endRound(_eventData_);
+            
+			// 获取他们的收入
+            _eth = withdrawEarnings(_pID);
+            
+            // gib moni
+            if (_eth > 0)
+                plyr_[_pID].addr.transfer(_eth);    
+            
+            // 构建事件数据
+            _eventData_.compressedData = _eventData_.compressedData + (_now * 1000000000000000000);
+            _eventData_.compressedIDs = _eventData_.compressedIDs + _pID;
+            
+            // 触发取款和分配事件
+            emit F3Devents.onWithdrawAndDistribute
+            (
+                msg.sender, 
+                plyr_[_pID].name, 
+                _eth, 
+                _eventData_.compressedData, 
+                _eventData_.compressedIDs, 
+                _eventData_.winnerAddr, 
+                _eventData_.winnerName, 
+                _eventData_.amountWon, 
+                _eventData_.newPot, 
+                _eventData_.P3DAmount, 
+                _eventData_.genAmount
+            );
+            
+        // 在任何其他情况下
+        } else {
+            // 获取他们的收入
+            _eth = withdrawEarnings(_pID);
+            
+            // gib moni
+            if (_eth > 0)
+                plyr_[_pID].addr.transfer(_eth);
+            
+            // 触发取款事件
+            emit F3Devents.onWithdraw(_pID, msg.sender, plyr_[_pID].name, _eth, _now);
+        }
+    }
+
+    /**
+    *   使用此函数来注册名称。 它们只是将注册请求发送给PlayerBook合约的包装器。 所以在这里注册与在那里注册是一样的。 UI将始终显示您注册的姓氏。
+    * 但您仍将拥有所有以前注册的名称以用作会员链接。
+    *
+    * _nameString：玩家想要的名字
+    * _affCode：会员ID，地址或推荐您的人的姓名
+    * _all：如果您希望将信息推送到所有游戏，则设置为true
+    * (这可能需要花费一些gas)
+     */
+    function registerNameXID(string _nameString, uint256 _affCode, bool _all) isHuman() public payable {
+        bytes32 _name = _nameString.nameFilter();
+        address _addr = msg.sender;
+        uint256 _paid = msg.value;
+        (bool _isNewPlayer, uint256 _affID) = PlayerBook.registerNameXIDFromDapp.value(_paid)(_addr, _name, _affCode, _all);
+        
+        uint256 _pID = pIDxAddr_[_addr];
+        
+        // 触发事件
+        emit F3Devents.onNewName(_pID, _addr, _name, _isNewPlayer, _affID, plyr_[_affID].addr, plyr_[_affID].name, _paid, now);
+    }
+
+    /**
+    *   使用此函数来注册名称。 它们只是将注册请求发送给PlayerBook合约的包装器。 所以在这里注册与在那里注册是一样的。 UI将始终显示您注册的姓氏。
+    * 但您仍将拥有所有以前注册的名称以用作会员链接。
+    *
+    * _nameString：玩家想要的名字
+    * _affCode：会员ID，地址或推荐您的人的姓名
+    * _all：如果您希望将信息推送到所有游戏，则设置为true
+    * (这可能需要花费一些gas)
+     */
+    function registerNameXaddr(string _nameString, address _affCode, bool _all) isHuman() public payable {
+        bytes32 _name = _nameString.nameFilter();
+        address _addr = msg.sender;
+        uint256 _paid = msg.value;
+        (bool _isNewPlayer, uint256 _affID) = PlayerBook.registerNameXaddrFromDapp.value(msg.value)(msg.sender, _name, _affCode, _all);
+        
+        uint256 _pID = pIDxAddr_[_addr];
+        
+        // 触发事件
+        emit F3Devents.onNewName(_pID, _addr, _name, _isNewPlayer, _affID, plyr_[_affID].addr, plyr_[_affID].name, _paid, now);
+    }
+
+    /**
+    *   使用此函数来注册名称。 它们只是将注册请求发送给PlayerBook合约的包装器。 所以在这里注册与在那里注册是一样的。 UI将始终显示您注册的姓氏。
+    * 但您仍将拥有所有以前注册的名称以用作会员链接。
+    *
+    * _nameString：玩家想要的名字
+    * _affCode：会员ID，地址或推荐您的人的姓名
+    * _all：如果您希望将信息推送到所有游戏，则设置为true
+    * (这可能需要花费一些gas)
+     */
+    function registerNameXname(string _nameString, bytes32 _affCode, bool _all) isHuman() public payable {
+        bytes32 _name = _nameString.nameFilter();
+        address _addr = msg.sender;
+        uint256 _paid = msg.value;
+        (bool _isNewPlayer, uint256 _affID) = PlayerBook.registerNameXnameFromDapp.value(msg.value)(msg.sender, _name, _affCode, _all);
+        
+        uint256 _pID = pIDxAddr_[_addr];
+        
+        // 触发事件
+        emit F3Devents.onNewName(_pID, _addr, _name, _isNewPlayer, _affID, plyr_[_affID].addr, plyr_[_affID].name, _paid, now);
+    }
+
+    //===============================
+    // 匿名函数
+    //===============================
+
+    /**
+    * 紧急购买使用最后存储的会员ID和队伍
+     */
+    function() isActivated() isHuman() isWithinLimits(msg.value) public payable {
+        // 设置交易的事件数据 判断玩家是否为新玩家
+        F3Ddatasets.EventReturns memory _eventData_ = determinePID(_eventData_);
+            
+        // 获取玩家id
+        uint256 _pID = pIDxAddr_[msg.sender];
+        buyCore(_pID, plyr_[_pID].laff, 2, _eventData_);
     }
 }
